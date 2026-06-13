@@ -64,9 +64,8 @@ app.get("/generate/stream", (req, res) => {
     });
 });
 
-app.listen(config.port, () => {
-  console.log(`🎨 AI Image Studio backend running on http://localhost:${config.port}`);
-  console.log(`   Endpoints:`);
-  console.log(`   POST /generate     — { prompt: "..." }`);
-  console.log(`   GET  /generate/stream?prompt=... (SSE stream)`);
+const PORT = process.env.PORT || config.port || 4000;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🎨 AI Image Studio backend running on port ${PORT}`);
 });
