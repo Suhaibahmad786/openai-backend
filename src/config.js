@@ -13,5 +13,5 @@ export const config = {
     ? "llama-3.2-90b-vision-preview"
     : "gpt-4o-mini",
   port: process.env.PORT || 4000,
-  baseUrl: process.env.BASE_URL || `http://localhost:${process.env.PORT || 4000}`,
+  baseUrl: process.env.BASE_URL || `http://localhost:${process.env.PORT || 8080}`,
 };
