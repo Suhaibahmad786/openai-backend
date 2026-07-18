@@ -7,9 +7,17 @@ const openai = new OpenAI({
 });
 
 function extractJSON(text) {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (match) return JSON.parse(match[0]);
-  throw new Error("No JSON found in response: " + text.slice(0, 200));
+  const start = text.indexOf("{");
+  if (start === -1) throw new Error("No JSON found in response: " + text.slice(0, 200));
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === "{") depth++;
+    if (text[i] === "}") depth--;
+    if (depth === 0) {
+      return JSON.parse(text.slice(start, i + 1));
+    }
+  }
+  throw new Error("Incomplete JSON in response: " + text.slice(0, 200));
 }
 
 export async function chatJSON(systemPrompt, userPrompt) {
