@@ -8,7 +8,7 @@ const openai = new OpenAI({
 
 function stripThinking(text) {
   let cleaned = text.replace(/<think>[\s\S]*?<\/think>/g, "");
-  cleaned = text.replace(/<think>[\s\S]*$/g, "");
+  cleaned = cleaned.replace(/<think>[\s\S]*$/g, "");
   return cleaned.trim();
 }
 
