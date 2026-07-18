@@ -50,6 +50,33 @@ app.get("/test", async (_, res) => {
   res.json(results);
 });
 
+app.get("/test-workflow", async (_, res) => {
+  const steps = [];
+  try {
+    const { chatJSON } = await import("./services/openaiClient.js");
+    steps.push({ step: "groq_import", status: "ok" });
+
+    const { generateImage } = await import("./services/imageClient.js");
+    steps.push({ step: "image_import", status: "ok" });
+
+    steps.push({ step: "intent", status: "running" });
+    const intent = await chatJSON("Return JSON with subject, style, mood, keyVisualElements", 'Analyze: "a cute cat"');
+    steps[steps.length - 1] = { step: "intent", status: "ok", result: intent };
+
+    steps.push({ step: "prompt_expand", status: "running" });
+    const expanded = await chatJSON('Return JSON: { "variations": ["...","...","..."] }', `Original: "a cute cat"\nAnalysis: ${JSON.stringify(intent)}\nGenerate 3 prompt variations.`);
+    steps[steps.length - 1] = { step: "prompt_expand", status: "ok", variations: expanded.variations };
+
+    steps.push({ step: "image_gen_1", status: "running" });
+    const imgUrl = await generateImage(expanded.variations[0]);
+    steps[steps.length - 1] = { step: "image_gen_1", status: "ok", url: imgUrl };
+
+    res.json({ status: steps.every(s => s.status === "ok") ? "all_passed" : "failed", steps });
+  } catch (e) {
+    res.json({ status: "failed", steps, error: e.message });
+  }
+});
+
 app.post("/generate", async (req, res) => {
   const { prompt } = req.body;
 
