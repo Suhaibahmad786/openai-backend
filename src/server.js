@@ -14,6 +14,42 @@ app.use("/generated", express.static(path.resolve(__dirname, "../generated")));
 
 app.get("/", (_, res) => res.json({ status: "ok", service: "ai-image-studio-backend" }));
 
+app.get("/test", async (_, res) => {
+  const results = { filesystem: "unknown", pollinations: "unknown", groq: "unknown" };
+
+  try {
+    const fs = await import("fs");
+    const testPath = path.resolve(__dirname, "../generated/.test");
+    fs.default.writeFileSync(testPath, "ok");
+    fs.default.unlinkSync(testPath);
+    results.filesystem = "ok";
+  } catch (e) {
+    results.filesystem = "fail: " + e.message;
+  }
+
+  try {
+    const resp = await fetch("https://image.pollinations.ai/prompt/cat?width=128&height=128&nologo=true&seed=1", { signal: AbortSignal.timeout(30000) });
+    results.pollinations = resp.ok ? "ok" : `fail: HTTP ${resp.status}`;
+  } catch (e) {
+    results.pollinations = "fail: " + e.message;
+  }
+
+  try {
+    const { chatJSON } = await import("./services/openaiClient.js");
+    const r = await chatJSON("Return JSON: {\"ok\": true}", "Just return ok true");
+    results.groq = r.ok === true ? "ok" : "fail: unexpected response";
+  } catch (e) {
+    results.groq = "fail: " + e.message;
+  }
+
+  results.env = {
+    GROQ_API_KEY: config.llmApiKey ? "set" : "missing",
+    BASE_URL: config.baseUrl,
+  };
+
+  res.json(results);
+});
+
 app.post("/generate", async (req, res) => {
   const { prompt } = req.body;
 
@@ -29,7 +65,7 @@ app.post("/generate", async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error("[Server] ❌ Workflow failed:", err);
-    res.status(500).json({ error: err.message || "Internal server error" });
+    res.status(500).json({ error: err.message || "Internal server error", stack: err.stack });
   }
 });
 
