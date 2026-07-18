@@ -25,7 +25,7 @@ export async function generateImage(prompt) {
   const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&seed=${seed}`;
   console.log(`[ImageGen] Generating via Pollinations for prompt: "${prompt.slice(0, 60)}..."`);
 
-  const resp = await fetch(pollinationsUrl, { method: "GET" });
+  const resp = await fetch(pollinationsUrl, { method: "GET", signal: AbortSignal.timeout(60000) });
 
   if (!resp.ok) {
     const text = await resp.text();

@@ -62,10 +62,13 @@ app.post("/generate", async (req, res) => {
   try {
     const result = await runWorkflow(prompt.trim());
     console.log("[Server] ✅ Generation complete\n");
+    if (result && result.error) {
+      console.log("[Server] ⚠️ Workflow returned error:", result.error);
+    }
     res.json(result);
   } catch (err) {
     console.error("[Server] ❌ Workflow failed:", err);
-    res.status(500).json({ error: err.message || "Internal server error", stack: err.stack });
+    res.status(500).json({ error: err.message || "Internal server error" });
   }
 });
 
