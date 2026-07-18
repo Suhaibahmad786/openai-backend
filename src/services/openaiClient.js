@@ -7,14 +7,15 @@ const openai = new OpenAI({
 });
 
 function extractJSON(text) {
-  const start = text.indexOf("{");
+  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  const start = cleaned.indexOf("{");
   if (start === -1) throw new Error("No JSON found in response: " + text.slice(0, 200));
   let depth = 0;
-  for (let i = start; i < text.length; i++) {
-    if (text[i] === "{") depth++;
-    if (text[i] === "}") depth--;
+  for (let i = start; i < cleaned.length; i++) {
+    if (cleaned[i] === "{") depth++;
+    if (cleaned[i] === "}") depth--;
     if (depth === 0) {
-      return JSON.parse(text.slice(start, i + 1));
+      return JSON.parse(cleaned.slice(start, i + 1));
     }
   }
   throw new Error("Incomplete JSON in response: " + text.slice(0, 200));
