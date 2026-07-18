@@ -6,8 +6,14 @@ const openai = new OpenAI({
   baseURL: config.llmBaseUrl,
 });
 
+function stripThinking(text) {
+  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/g, "");
+  cleaned = text.replace(/<think>[\s\S]*$/g, "");
+  return cleaned.trim();
+}
+
 function extractJSON(text) {
-  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  const cleaned = stripThinking(text);
   const start = cleaned.indexOf("{");
   if (start === -1) throw new Error("No JSON found in response: " + text.slice(0, 200));
   let depth = 0;
@@ -42,7 +48,7 @@ export async function chat(systemPrompt, userPrompt) {
     ],
     temperature: 0.8,
   });
-  return response.choices[0].message.content;
+  return stripThinking(response.choices[0].message.content);
 }
 
 export async function visionScore(imageUrl, originalPrompt) {
