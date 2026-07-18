@@ -34,18 +34,15 @@ export async function generateImage(prompt) {
 
   const buffer = Buffer.from(await resp.arrayBuffer());
 
-  if (!canWriteFs) {
-    console.log(`[ImageGen] Serving via Pollinations URL (seed=${seed})`);
-    return pollinationsUrl;
+  if (canWriteFs) {
+    const contentType = resp.headers.get("content-type") || "image/jpeg";
+    const ext = contentType.includes("png") ? "png" : "jpg";
+    const filename = `${crypto.randomUUID()}.${ext}`;
+    const filepath = path.join(IMAGES_DIR, filename);
+    fs.writeFileSync(filepath, buffer);
+    console.log(`[ImageGen] Image saved locally`);
   }
 
-  const contentType = resp.headers.get("content-type") || "image/jpeg";
-  const ext = contentType.includes("png") ? "png" : "jpg";
-  const filename = `${crypto.randomUUID()}.${ext}`;
-  const filepath = path.join(IMAGES_DIR, filename);
-  fs.writeFileSync(filepath, buffer);
-
-  const imageUrl = `${config.baseUrl}/generated/${filename}`;
-  console.log(`[ImageGen] Image saved: ${imageUrl}`);
-  return imageUrl;
+  console.log(`[ImageGen] Serving via Pollinations URL (seed=${seed})`);
+  return pollinationsUrl;
 }
