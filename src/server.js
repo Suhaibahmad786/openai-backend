@@ -8,8 +8,15 @@ import { runWorkflow } from "./graph/workflow.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.use(cors({ origin: true }));
+app.use(express.json({ limit: "1mb" }));
+
+const REQUEST_TIMEOUT_MS = 180_000;
+app.use("/generate", (req, res, next) => {
+  req.setTimeout(REQUEST_TIMEOUT_MS);
+  res.setTimeout(REQUEST_TIMEOUT_MS);
+  next();
+});
 app.use("/generated", express.static(path.resolve(__dirname, "../generated")));
 
 app.get("/", (_, res) => res.json({ status: "ok", service: "ai-image-studio-backend" }));
@@ -118,18 +125,30 @@ app.get("/generate/stream", (req, res) => {
 
   sendEvent("log", { message: "Starting AI Image Studio pipeline..." });
 
+  const heartbeat = setInterval(() => {
+    try { res.write(": heartbeat\n\n"); } catch {}
+  }, 15000);
+
+  const cleanup = () => {
+    clearInterval(heartbeat);
+  };
+
   runWorkflow(prompt.trim(), {
     onNodeStart: (node) => sendEvent("node_start", { node }),
     onNodeEnd: (node) => sendEvent("node_end", { node }),
   })
     .then((result) => {
       sendEvent("complete", { result });
+      cleanup();
       res.end();
     })
     .catch((err) => {
       sendEvent("error", { error: err.message });
+      cleanup();
       res.end();
     });
+
+  req.on("close", cleanup);
 });
 
 const PORT = config.port;
