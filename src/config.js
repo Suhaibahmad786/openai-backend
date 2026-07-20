@@ -7,7 +7,7 @@ export const config = {
     : "https://api.openai.com/v1",
   hfToken: process.env.HF_TOKEN,
   textModel: "llama-3.3-70b-versatile",
-  visionModel: "llama-3.2-90b-vision-preview",
+  visionModel: "llama-3.3-70b-versatile",
   port: process.env.PORT || 4000,
   baseUrl: process.env.BASE_URL || `http://localhost:${process.env.PORT || 4000}`,
 };
