@@ -130,9 +130,11 @@ app.get("/generate/stream", (req, res) => {
 
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
   });
+  res.flushHeaders();
 
   const sendEvent = (stage, data) => {
     res.write(`event: ${stage}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -141,8 +143,10 @@ app.get("/generate/stream", (req, res) => {
   sendEvent("log", { message: "Starting AI Image Studio pipeline..." });
 
   const heartbeat = setInterval(() => {
-    try { res.write(": heartbeat\n\n"); } catch {}
-  }, 15000);
+    try {
+      res.write(": heartbeat\n\n");
+    } catch {}
+  }, 10000);
 
   const cleanup = () => {
     clearInterval(heartbeat);
