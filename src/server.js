@@ -11,6 +11,21 @@ const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "1mb" }));
 
+app.get("/test-image", async (_, res) => {
+  const result = { pollinations: "unknown" };
+  try {
+    const url = "https://image.pollinations.ai/prompt/cat?width=128&height=128&nologo=true&seed=1";
+    console.log("[Test] Fetching Pollinations...");
+    const resp = await fetch(url, { signal: AbortSignal.timeout(90000), redirect: "follow" });
+    result.pollinations = resp.ok ? "ok" : `fail: HTTP ${resp.status}`;
+    result.contentType = resp.headers.get("content-type");
+    result.contentLength = resp.headers.get("content-length");
+  } catch (e) {
+    result.pollinations = "fail: " + e.message;
+  }
+  res.json(result);
+});
+
 const REQUEST_TIMEOUT_MS = 180_000;
 app.use("/generate", (req, res, next) => {
   req.setTimeout(REQUEST_TIMEOUT_MS);
