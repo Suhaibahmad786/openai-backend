@@ -2,17 +2,18 @@ import { visionScore } from "../../services/openaiClient.js";
 
 export default async function visionJudge(state) {
   const images = state.generatedImages;
-  console.log(`[Node] vision_judge — scoring ${images.length} images`);
+  const validImages = images.filter((img) => img.url);
+  console.log(`[Node] vision_judge — scoring ${validImages.length} images`);
 
   const scoreResults = [];
 
-  for (const img of images) {
+  for (const img of validImages) {
     try {
       const score = await visionScore(img.url, state.originalPrompt);
-      console.log(`[Node] vision_judge — score ${score.total}/100 for ${img.url.slice(-30)}`);
+      console.log(`[Node] vision_judge — score ${score.total}/100`);
       scoreResults.push({ url: img.url, ...score });
     } catch (err) {
-      console.error(`[Node] vision_judge — failed for ${img.url.slice(-30)}`, err.message);
+      console.error(`[Node] vision_judge — failed:`, err.message);
       scoreResults.push({
         url: img.url,
         total: 0,
@@ -20,7 +21,7 @@ export default async function visionJudge(state) {
         reasoning: "Scoring failed",
       });
     }
-    if (images.indexOf(img) < images.length - 1) {
+    if (validImages.indexOf(img) < validImages.length - 1) {
       await new Promise((r) => setTimeout(r, 2000));
     }
   }

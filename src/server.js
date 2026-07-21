@@ -85,23 +85,25 @@ app.get("/proxy-image", async (req, res) => {
   }
 });
 
-function wrapImageUrl(url, req) {
-  if (!url || !url.startsWith("https://image.pollinations.ai/")) return url;
+function resolveImageUrl(url, req) {
+  if (!url) return url;
   const proto = req.headers["x-forwarded-proto"] || "http";
   const host = req.headers["host"] || `localhost:${config.port}`;
-  return `${proto}://${host}/proxy-image?url=${encodeURIComponent(url)}`;
+  const base = `${proto}://${host}`;
+  if (url.startsWith("http")) return url;
+  return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
 }
 
 function wrapResultUrls(result, req) {
   if (!result) return result;
   const wrapped = { ...result };
   if (wrapped.bestImageUrl) {
-    wrapped.bestImageUrl = wrapImageUrl(wrapped.bestImageUrl, req);
+    wrapped.bestImageUrl = resolveImageUrl(wrapped.bestImageUrl, req);
   }
   if (wrapped.allCandidates && Array.isArray(wrapped.allCandidates)) {
     wrapped.allCandidates = wrapped.allCandidates.map((c) => ({
       ...c,
-      url: wrapImageUrl(c.url, req),
+      url: resolveImageUrl(c.url, req),
     }));
   }
   return wrapped;
