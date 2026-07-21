@@ -26,7 +26,7 @@ app.get("/test-image", async (_, res) => {
   res.json(result);
 });
 
-const REQUEST_TIMEOUT_MS = 180_000;
+const REQUEST_TIMEOUT_MS = 600_000;
 app.use("/generate", (req, res, next) => {
   req.setTimeout(REQUEST_TIMEOUT_MS);
   res.setTimeout(REQUEST_TIMEOUT_MS);
@@ -219,9 +219,13 @@ app.get("/generate/stream", (req, res) => {
 
   const heartbeat = setInterval(() => {
     try {
-      res.write(": heartbeat\n\n");
-    } catch {}
-  }, 10000);
+      if (!res.writableEnded) {
+        res.write(`: heartbeat ${Date.now()}\n\n`);
+      }
+    } catch (e) {
+      console.warn("[SSE] Heartbeat write failed:", e.message);
+    }
+  }, 5000);
 
   const cleanup = () => {
     clearInterval(heartbeat);
