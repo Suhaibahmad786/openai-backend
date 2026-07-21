@@ -34,6 +34,33 @@ app.use("/generate", (req, res, next) => {
 });
 app.use("/generated", express.static(path.resolve(__dirname, "../generated")));
 
+app.get("/proxy-image", async (req, res) => {
+  const imageUrl = req.query.url;
+  if (!imageUrl || !imageUrl.startsWith("https://image.pollinations.ai/")) {
+    return res.status(400).json({ error: "Invalid or missing Pollinations URL" });
+  }
+  try {
+    console.log(`[Proxy] Fetching: ${imageUrl.slice(0, 120)}...`);
+    const resp = await fetch(imageUrl, {
+      signal: AbortSignal.timeout(120_000),
+      redirect: "follow",
+    });
+    if (!resp.ok) {
+      return res.status(resp.status).json({ error: `Upstream returned HTTP ${resp.status}` });
+    }
+    const contentType = resp.headers.get("content-type") || "image/jpeg";
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    const buffer = Buffer.from(await resp.arrayBuffer());
+    console.log(`[Proxy] OK — ${buffer.length} bytes, ${contentType}`);
+    res.send(buffer);
+  } catch (e) {
+    console.error(`[Proxy] Failed: ${e.message}`);
+    res.status(502).json({ error: `Proxy fetch failed: ${e.message}` });
+  }
+});
+
 app.get("/", (_, res) => res.json({ status: "ok", service: "ai-image-studio-backend" }));
 
 app.get("/test", async (_, res) => {
