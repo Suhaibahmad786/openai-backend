@@ -32,6 +32,11 @@ app.use("/generate", (req, res, next) => {
   res.setTimeout(REQUEST_TIMEOUT_MS);
   next();
 });
+app.use("/proxy-image", (req, res, next) => {
+  req.setTimeout(REQUEST_TIMEOUT_MS);
+  res.setTimeout(REQUEST_TIMEOUT_MS);
+  next();
+});
 app.use("/generated", express.static(path.resolve(__dirname, "../generated")));
 
 app.get("/proxy-image", async (req, res) => {
@@ -39,27 +44,68 @@ app.get("/proxy-image", async (req, res) => {
   if (!imageUrl || !imageUrl.startsWith("https://image.pollinations.ai/")) {
     return res.status(400).json({ error: "Invalid or missing Pollinations URL" });
   }
+  const MAX_TIME = 180_000;
+  const startTime = Date.now();
   try {
     console.log(`[Proxy] Fetching: ${imageUrl.slice(0, 120)}...`);
-    const resp = await fetch(imageUrl, {
-      signal: AbortSignal.timeout(120_000),
-      redirect: "follow",
-    });
-    if (!resp.ok) {
-      return res.status(resp.status).json({ error: `Upstream returned HTTP ${resp.status}` });
+    let resp;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      resp = await fetch(imageUrl, {
+        signal: AbortSignal.timeout(MAX_TIME),
+        redirect: "follow",
+      });
+      const ct = resp.headers.get("content-type") || "";
+      if (resp.ok && ct.includes("image")) break;
+      if (resp.ok && !ct.includes("image")) {
+        console.log(`[Proxy] Got non-image response (${ct}), retrying in 5s...`);
+        resp.body?.cancel();
+        await new Promise((r) => setTimeout(r, 5000));
+        continue;
+      }
+      console.log(`[Proxy] Got HTTP ${resp.status}, retrying in 5s...`);
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+    if (!resp || !resp.ok) {
+      return res.status(502).json({ error: `Upstream failed after retries` });
     }
     const contentType = resp.headers.get("content-type") || "image/jpeg";
+    if (!contentType.includes("image")) {
+      return res.status(502).json({ error: `Upstream returned non-image: ${contentType}` });
+    }
     res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "public, max-age=86400, immutable");
     res.setHeader("Access-Control-Allow-Origin", "*");
     const buffer = Buffer.from(await resp.arrayBuffer());
-    console.log(`[Proxy] OK — ${buffer.length} bytes, ${contentType}`);
+    const elapsed = Date.now() - startTime;
+    console.log(`[Proxy] OK — ${buffer.length} bytes, ${contentType}, ${elapsed}ms`);
     res.send(buffer);
   } catch (e) {
     console.error(`[Proxy] Failed: ${e.message}`);
     res.status(502).json({ error: `Proxy fetch failed: ${e.message}` });
   }
 });
+
+function wrapImageUrl(url, req) {
+  if (!url || !url.startsWith("https://image.pollinations.ai/")) return url;
+  const proto = req.headers["x-forwarded-proto"] || "http";
+  const host = req.headers["host"] || `localhost:${config.port}`;
+  return `${proto}://${host}/proxy-image?url=${encodeURIComponent(url)}`;
+}
+
+function wrapResultUrls(result, req) {
+  if (!result) return result;
+  const wrapped = { ...result };
+  if (wrapped.bestImageUrl) {
+    wrapped.bestImageUrl = wrapImageUrl(wrapped.bestImageUrl, req);
+  }
+  if (wrapped.allCandidates && Array.isArray(wrapped.allCandidates)) {
+    wrapped.allCandidates = wrapped.allCandidates.map((c) => ({
+      ...c,
+      url: wrapImageUrl(c.url, req),
+    }));
+  }
+  return wrapped;
+}
 
 app.get("/", (_, res) => res.json({ status: "ok", service: "ai-image-studio-backend" }));
 
@@ -141,7 +187,7 @@ app.post("/generate", async (req, res) => {
     if (result && result.error) {
       console.log("[Server] ⚠️ Workflow returned error:", result.error);
     }
-    res.json(result);
+    res.json(wrapResultUrls(result, req));
   } catch (err) {
     console.error("[Server] ❌ Workflow failed:", err);
     res.status(500).json({ error: err.message || "Internal server error" });
@@ -184,7 +230,7 @@ app.get("/generate/stream", (req, res) => {
     onNodeEnd: (node) => sendEvent("node_end", { node }),
   })
     .then((result) => {
-      sendEvent("complete", { result });
+      sendEvent("complete", { result: wrapResultUrls(result, req) });
       cleanup();
       res.end();
     })
