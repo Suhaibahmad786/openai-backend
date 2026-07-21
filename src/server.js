@@ -90,7 +90,7 @@ app.get("/test-workflow", async (_, res) => {
     steps[steps.length - 1] = { step: "prompt_expand", status: "ok", variations: expanded.variations };
 
     steps.push({ step: "image_gen_1", status: "running" });
-    const imgUrl = await generateImage(expanded.variations[0]);
+    const imgUrl = generateImage(expanded.variations[0]);
     steps[steps.length - 1] = { step: "image_gen_1", status: "ok", url: imgUrl };
 
     res.json({ status: steps.every(s => s.status === "ok") ? "all_passed" : "failed", steps });

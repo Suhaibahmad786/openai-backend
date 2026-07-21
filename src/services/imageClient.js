@@ -22,38 +22,25 @@ function buildPollinationsUrl(prompt, seed) {
   return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&seed=${seed}`;
 }
 
-export async function generateImage(prompt) {
+function verifyInBackground(url) {
+  fetch(url, { signal: AbortSignal.timeout(120000), redirect: "follow" })
+    .then(async (resp) => {
+      if (!resp.ok || !canWriteFs) return;
+      const ct = resp.headers.get("content-type") || "";
+      if (!ct.includes("image")) return;
+      const buffer = Buffer.from(await resp.arrayBuffer());
+      const ext = ct.includes("png") ? "png" : "jpg";
+      const filename = `${crypto.randomUUID()}.${ext}`;
+      fs.writeFileSync(path.join(IMAGES_DIR, filename), buffer);
+      console.log(`[ImageGen] Background save ok: ${filename}`);
+    })
+    .catch(() => {});
+}
+
+export function generateImage(prompt) {
   const seed = Math.floor(Math.random() * 1000000);
   const url = buildPollinationsUrl(prompt, seed);
   console.log(`[ImageGen] URL ready (seed=${seed}): "${prompt.slice(0, 60)}..."`);
-
-  try {
-    const resp = await fetch(url, {
-      method: "GET",
-      signal: AbortSignal.timeout(90000),
-      redirect: "follow",
-    });
-
-    if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status}`);
-    }
-
-    const ct = resp.headers.get("content-type") || "";
-    if (ct.includes("image") && canWriteFs) {
-      try {
-        const buffer = Buffer.from(await resp.arrayBuffer());
-        const ext = ct.includes("png") ? "png" : "jpg";
-        const filename = `${crypto.randomUUID()}.${ext}`;
-        fs.writeFileSync(path.join(IMAGES_DIR, filename), buffer);
-        console.log(`[ImageGen] Image verified and saved`);
-      } catch {
-        console.warn(`[ImageGen] Save failed, URL still valid`);
-      }
-    }
-
-    return url;
-  } catch (err) {
-    console.warn(`[ImageGen] Verification fetch failed: ${err.message} — returning URL anyway`);
-    return url;
-  }
+  verifyInBackground(url);
+  return url;
 }
