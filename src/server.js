@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import { config } from "./config.js";
 import { runWorkflow } from "./graph/workflow.js";
+import { getCachedImage, fetchAndCacheImage } from "./services/imageClient.js";
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -24,6 +25,16 @@ app.get("/proxy-image", async (req, res) => {
   if (!imageUrl || !imageUrl.startsWith("https://image.pollinations.ai/")) {
     return res.status(400).json({ error: "Invalid or missing Pollinations URL" });
   }
+
+  const cached = getCachedImage(imageUrl);
+  if (cached) {
+    console.log(`[Proxy] Cache hit for: ${imageUrl.slice(0, 80)}...`);
+    res.setHeader("Content-Type", cached.contentType);
+    res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    return res.send(cached.buffer);
+  }
+
   const MAX_TIME = 180_000;
   const startTime = Date.now();
   try {
@@ -52,12 +63,12 @@ app.get("/proxy-image", async (req, res) => {
     if (!contentType.includes("image")) {
       return res.status(502).json({ error: `Upstream returned non-image: ${contentType}` });
     }
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("Cache-Control", "public, max-age=86400, immutable");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     const buffer = Buffer.from(await resp.arrayBuffer());
     const elapsed = Date.now() - startTime;
     console.log(`[Proxy] OK — ${buffer.length} bytes, ${contentType}, ${elapsed}ms`);
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+    res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(buffer);
   } catch (e) {
     console.error(`[Proxy] Failed: ${e.message}`);
