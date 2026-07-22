@@ -1,30 +1,11 @@
 import express from "express";
 import cors from "cors";
-import path from "path";
-import { fileURLToPath } from "url";
 import { config } from "./config.js";
 import { runWorkflow } from "./graph/workflow.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "1mb" }));
-
-app.get("/test-image", async (_, res) => {
-  const result = { pollinations: "unknown" };
-  try {
-    const url = "https://image.pollinations.ai/prompt/cat?width=128&height=128&nologo=true&seed=1";
-    console.log("[Test] Fetching Pollinations...");
-    const resp = await fetch(url, { signal: AbortSignal.timeout(90000), redirect: "follow" });
-    result.pollinations = resp.ok ? "ok" : `fail: HTTP ${resp.status}`;
-    result.contentType = resp.headers.get("content-type");
-    result.contentLength = resp.headers.get("content-length");
-  } catch (e) {
-    result.pollinations = "fail: " + e.message;
-  }
-  res.json(result);
-});
 
 const REQUEST_TIMEOUT_MS = 600_000;
 app.use("/generate", (req, res, next) => {
@@ -37,7 +18,6 @@ app.use("/proxy-image", (req, res, next) => {
   res.setTimeout(REQUEST_TIMEOUT_MS);
   next();
 });
-app.use("/generated", express.static(path.resolve(__dirname, "../generated")));
 
 app.get("/proxy-image", async (req, res) => {
   const imageUrl = req.query.url;
@@ -85,44 +65,10 @@ app.get("/proxy-image", async (req, res) => {
   }
 });
 
-function resolveImageUrl(url, req) {
-  if (!url) return url;
-  const proto = req.headers["x-forwarded-proto"] || "http";
-  const host = req.headers["host"] || `localhost:${config.port}`;
-  const base = `${proto}://${host}`;
-  if (url.startsWith("http")) return url;
-  return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
-}
-
-function wrapResultUrls(result, req) {
-  if (!result) return result;
-  const wrapped = { ...result };
-  if (wrapped.bestImageUrl) {
-    wrapped.bestImageUrl = resolveImageUrl(wrapped.bestImageUrl, req);
-  }
-  if (wrapped.allCandidates && Array.isArray(wrapped.allCandidates)) {
-    wrapped.allCandidates = wrapped.allCandidates.map((c) => ({
-      ...c,
-      url: resolveImageUrl(c.url, req),
-    }));
-  }
-  return wrapped;
-}
-
 app.get("/", (_, res) => res.json({ status: "ok", service: "ai-image-studio-backend" }));
 
 app.get("/test", async (_, res) => {
-  const results = { filesystem: "unknown", pollinations: "unknown", groq: "unknown" };
-
-  try {
-    const fs = await import("fs");
-    const testPath = path.resolve(__dirname, "../generated/.test");
-    fs.default.writeFileSync(testPath, "ok");
-    fs.default.unlinkSync(testPath);
-    results.filesystem = "ok";
-  } catch (e) {
-    results.filesystem = "fail: " + e.message;
-  }
+  const results = { pollinations: "unknown", groq: "unknown" };
 
   try {
     const resp = await fetch("https://image.pollinations.ai/prompt/cat?width=128&height=128&nologo=true&seed=1", { signal: AbortSignal.timeout(30000) });
@@ -141,37 +87,9 @@ app.get("/test", async (_, res) => {
 
   results.env = {
     GROQ_API_KEY: config.llmApiKey ? "set" : "missing",
-    BASE_URL: config.baseUrl,
   };
 
   res.json(results);
-});
-
-app.get("/test-workflow", async (_, res) => {
-  const steps = [];
-  try {
-    const { chatJSON } = await import("./services/openaiClient.js");
-    steps.push({ step: "groq_import", status: "ok" });
-
-    const { generateImage } = await import("./services/imageClient.js");
-    steps.push({ step: "image_import", status: "ok" });
-
-    steps.push({ step: "intent", status: "running" });
-    const intent = await chatJSON("Return JSON with subject, style, mood, keyVisualElements", 'Analyze: "a cute cat"');
-    steps[steps.length - 1] = { step: "intent", status: "ok", result: intent };
-
-    steps.push({ step: "prompt_expand", status: "running" });
-    const expanded = await chatJSON('Return JSON: { "variations": ["...","...","..."] }', `Original: "a cute cat"\nAnalysis: ${JSON.stringify(intent)}\nGenerate 3 prompt variations.`);
-    steps[steps.length - 1] = { step: "prompt_expand", status: "ok", variations: expanded.variations };
-
-    steps.push({ step: "image_gen_1", status: "running" });
-    const imgUrl = generateImage(expanded.variations[0]);
-    steps[steps.length - 1] = { step: "image_gen_1", status: "ok", url: imgUrl };
-
-    res.json({ status: steps.every(s => s.status === "ok") ? "all_passed" : "failed", steps });
-  } catch (e) {
-    res.json({ status: "failed", steps, error: e.message });
-  }
 });
 
 app.post("/generate", async (req, res) => {
@@ -189,7 +107,7 @@ app.post("/generate", async (req, res) => {
     if (result && result.error) {
       console.log("[Server] ⚠️ Workflow returned error:", result.error);
     }
-    res.json(wrapResultUrls(result, req));
+    res.json(result);
   } catch (err) {
     console.error("[Server] ❌ Workflow failed:", err);
     res.status(500).json({ error: err.message || "Internal server error" });
@@ -236,7 +154,7 @@ app.get("/generate/stream", (req, res) => {
     onNodeEnd: (node) => sendEvent("node_end", { node }),
   })
     .then((result) => {
-      sendEvent("complete", { result: wrapResultUrls(result, req) });
+      sendEvent("complete", { result });
       cleanup();
       res.end();
     })
