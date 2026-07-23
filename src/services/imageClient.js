@@ -36,7 +36,18 @@ export function getCachedImage(url) {
 }
 
 export function buildPollinationsUrl(prompt, seed) {
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&seed=${seed}`;
+  const negative = "worst quality, blurry, low quality, distorted, watermark, text, deformed, ugly, disfigured";
+  const params = new URLSearchParams({
+    width: "1536",
+    height: "1536",
+    nologo: "true",
+    seed: String(seed),
+    model: "flux",
+    negative_prompt: negative,
+    quality: "high",
+    enhance: "true",
+  });
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${params.toString()}`;
 }
 
 export function generateImage(prompt) {
